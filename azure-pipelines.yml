@@ -25,3 +25,82 @@ stages:
         pip install -r requirements.txt
         pytest
       displayName: 'Install dependencies and run tests'
+
+- stage: Deploy
+  displayName: 'Deploy Application'
+
+  dependsOn: BuildAndTest
+  condition: succeeded()
+
+  jobs:
+  - job: DeployToVM
+    displayName: 'Deploy to Azure VM'
+
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    steps:
+        - task: CopyFilesOverSSH@0
+      inputs:
+        sshEndpoint: 'deployment-vm'
+        sourceFolder: '$(Build.SourcesDirectory)'
+        contents: |
+          app.py
+          calculator.py
+          requirements.txt
+        targetFolder: '/home/azureuser/calculator_project_python'
+        readyTimeout: '20000'
+      displayName: 'Copy application to deployment VM'
+
+            - task: SSH@0
+      inputs:
+        sshEndpoint: 'deployment-vm'
+        runOptions: 'inline'
+        inline: |
+          set -e
+
+          echo "Installing Python virtual environment support..."
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv
+
+          echo "Creating application directory..."
+          mkdir -p /home/azureuser/calculator_project_python
+
+          cd /home/azureuser/calculator_project_python
+
+          echo "Creating virtual environment..."
+          python3 -m venv venv
+
+          echo "Installing application dependencies..."
+          ./venv/bin/pip install --upgrade pip
+          ./venv/bin/pip install -r requirements.txt
+
+          echo "Stopping old application if running..."
+          sudo systemctl stop calculator.service || true
+
+          echo "Creating systemd service..."
+          sudo tee /etc/systemd/system/calculator.service > /dev/null <<'EOF'
+          [Unit]
+          Description=Python Calculator Flask Application
+          After=network.target
+
+          [Service]
+          User=azureuser
+          WorkingDirectory=/home/azureuser/calculator_project_python
+          ExecStart=/home/azureuser/calculator_project_python/venv/bin/python app.py
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          echo "Starting application..."
+          sudo systemctl daemon-reload
+          sudo systemctl enable calculator.service
+          sudo systemctl restart calculator.service
+
+          echo "Application status:"
+          sudo systemctl --no-pager status calculator.service
+
+      displayName: 'Configure and start application'
+
