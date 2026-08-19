@@ -52,7 +52,7 @@ stages:
         readyTimeout: '20000'
       displayName: 'Copy application to deployment VM'
 
-            - task: SSH@0
+        - task: SSH@0
       inputs:
         sshEndpoint: 'deployment-vm'
         runOptions: 'inline'
