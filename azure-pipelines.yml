@@ -101,6 +101,5 @@ stages:
 
           echo "Application status:"
           sudo systemctl --no-pager status calculator.service
-
-      displayName: 'Configure and start application'
+        displayName: 'Configure and start application'
 
